@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"strings"
 )
 
 func Serve(w http.ResponseWriter, r *http.Request) {
@@ -50,21 +49,50 @@ func Serve(w http.ResponseWriter, r *http.Request) {
 // parameters are assigned to the pointers in vars (len(vars) must be
 // the number of wildcards), which must be of type *string or *int.
 func match(path, pattern string, vars ...interface{}) bool {
-	for ; pattern != "" && path != ""; pattern = pattern[1:] {
-		switch pattern[0] {
-		case '+':
-			// '+' matches till next slash in path
-			slash := strings.IndexByte(path, '/')
-			if slash < 0 {
-				slash = len(path)
+	path = path[1:]
+	pattern = pattern[1:]
+	var pathEndsWithSlash bool
+	var patternEndsWithSlash bool
+	for path != "" && pattern != "" {
+		var pathSegment string
+		for i := 0; i < len(path); i++ {
+			if path[i] == '/' {
+				if i == len(path)-1 {
+					pathEndsWithSlash = true
+				}
+				pathSegment = path[:i]
+				path = path[i+1:]
+				break
 			}
-			segment := path[:slash]
-			path = path[slash:]
+		}
+		if pathSegment == "" {
+			pathSegment = path
+			path = ""
+		}
+
+		var patternSegment string
+		for i := 0; i < len(pattern); i++ {
+			if pattern[i] == '/' {
+				if i == len(pattern)-1 {
+					patternEndsWithSlash = true
+				}
+				patternSegment = pattern[:i]
+				pattern = pattern[i+1:]
+				break
+			}
+		}
+		if patternSegment == "" {
+			patternSegment = pattern
+			pattern = ""
+		}
+
+		if patternSegment == "+" {
+			// '+' matches till next slash in path
 			switch p := vars[0].(type) {
 			case *string:
-				*p = segment
+				*p = pathSegment
 			case *int:
-				n, err := strconv.Atoi(segment)
+				n, err := strconv.Atoi(pathSegment)
 				if err != nil || n < 0 {
 					return false
 				}
@@ -73,14 +101,12 @@ func match(path, pattern string, vars ...interface{}) bool {
 				panic("vars must be *string or *int")
 			}
 			vars = vars[1:]
-		case path[0]:
-			// non-'+' pattern byte must match path byte
-			path = path[1:]
-		default:
+		} else if patternSegment != pathSegment {
 			return false
 		}
 	}
-	return path == "" && pattern == ""
+	return path == "" && pattern == "" &&
+		pathEndsWithSlash == patternEndsWithSlash
 }
 
 func allowMethod(h http.HandlerFunc, method string) http.HandlerFunc {
