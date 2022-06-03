@@ -9,10 +9,19 @@ import (
 	"strings"
 )
 
+type app struct {
+	someConfig string
+}
+
+var theApp = app{
+	someConfig: "value1",
+}
+
 func Serve(w http.ResponseWriter, r *http.Request) {
 	var h http.Handler
-	var slug string
-	var id int
+	var apiWidget apiWidget
+	var apiWidgetPart apiWidgetPart
+	var widget widget
 
 	p := r.URL.Path
 	switch {
@@ -20,24 +29,26 @@ func Serve(w http.ResponseWriter, r *http.Request) {
 		h = get(home)
 	case match(p, "/contact"):
 		h = get(contact)
-	case match(p, "/api/widgets") && r.Method == "GET":
-		h = get(apiGetWidgets)
 	case match(p, "/api/widgets"):
-		h = post(apiCreateWidget)
-	case match(p, "/api/widgets/+", &slug):
-		h = post(apiWidget{slug}.update)
-	case match(p, "/api/widgets/+/parts", &slug):
-		h = post(apiWidget{slug}.createPart)
-	case match(p, "/api/widgets/+/parts/+/update", &slug, &id):
-		h = post(apiWidgetPart{slug, id}.update)
-	case match(p, "/api/widgets/+/parts/+/delete", &slug, &id):
-		h = post(apiWidgetPart{slug, id}.delete)
-	case match(p, "/+", &slug):
-		h = get(widget{slug}.widget)
-	case match(p, "/+/admin", &slug):
-		h = get(widget{slug}.admin)
-	case match(p, "/+/image", &slug):
-		h = post(widget{slug}.image)
+		if r.Method == "GET" {
+			h = get(apiGetWidgets)
+		} else {
+			h = post(apiCreateWidget)
+		}
+	case match(p, "/api/widgets/+", &apiWidget.slug):
+		h = post(appWithApiWidget{app: &theApp, urlParams: &apiWidget}.update)
+	case match(p, "/api/widgets/+/parts", &apiWidget.slug):
+		h = post(appWithApiWidget{app: &theApp, urlParams: &apiWidget}.createPart)
+	case match(p, "/api/widgets/+/parts/+/update", &apiWidgetPart.slug, &apiWidgetPart.id):
+		h = post(appWithApiWidgetPart{app: &theApp, urlParams: &apiWidgetPart}.update)
+	case match(p, "/api/widgets/+/parts/+/delete", &apiWidgetPart.slug, &apiWidgetPart.id):
+		h = post(appWithApiWidgetPart{app: &theApp, urlParams: &apiWidgetPart}.delete)
+	case match(p, "/+", &widget.slug):
+		h = get(appWithWidget{app: &theApp, urlParams: &widget}.widget)
+	case match(p, "/+/admin", &widget.slug):
+		h = get(appWithWidget{app: &theApp, urlParams: &widget}.admin)
+	case match(p, "/+/image", &widget.slug):
+		h = post(appWithWidget{app: &theApp, urlParams: &widget}.image)
 	default:
 		http.NotFound(w, r)
 		return
@@ -122,12 +133,17 @@ type apiWidget struct {
 	slug string
 }
 
-func (h apiWidget) update(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "apiUpdateWidget %s\n", h.slug)
+type appWithApiWidget struct {
+	*app
+	urlParams *apiWidget
 }
 
-func (h apiWidget) createPart(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "apiCreateWidgetPart %s\n", h.slug)
+func (h appWithApiWidget) update(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "apiUpdateWidget %s\n", h.urlParams.slug)
+}
+
+func (h appWithApiWidget) createPart(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "apiCreateWidgetPart %s\n", h.urlParams.slug)
 }
 
 type apiWidgetPart struct {
@@ -135,26 +151,36 @@ type apiWidgetPart struct {
 	id   int
 }
 
-func (h apiWidgetPart) update(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "apiUpdateWidgetPart %s %d\n", h.slug, h.id)
+type appWithApiWidgetPart struct {
+	*app
+	urlParams *apiWidgetPart
 }
 
-func (h apiWidgetPart) delete(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "apiDeleteWidgetPart %s %d\n", h.slug, h.id)
+func (h appWithApiWidgetPart) update(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "apiUpdateWidgetPart %s %d\n", h.urlParams.slug, h.urlParams.id)
+}
+
+func (h appWithApiWidgetPart) delete(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "apiDeleteWidgetPart %s %d\n", h.urlParams.slug, h.urlParams.id)
 }
 
 type widget struct {
 	slug string
 }
 
-func (h widget) widget(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "widget %s\n", h.slug)
+type appWithWidget struct {
+	*app
+	urlParams *widget
 }
 
-func (h widget) admin(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "widgetAdmin %s\n", h.slug)
+func (h appWithWidget) widget(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "widget %s\n", h.urlParams.slug)
 }
 
-func (h widget) image(w http.ResponseWriter, r *http.Request) {
-	fmt.Fprintf(w, "widgetImage %s\n", h.slug)
+func (h appWithWidget) admin(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "widgetAdmin %s\n", h.urlParams.slug)
+}
+
+func (h appWithWidget) image(w http.ResponseWriter, r *http.Request) {
+	fmt.Fprintf(w, "widgetImage %s\n", h.urlParams.slug)
 }
